@@ -34,7 +34,7 @@ As technology advances, many traditional forms of media are starting to be left 
 
 # Data
 
-The authors' of this paper have used a variety of sources in order to construct their datasets. This data is publicly available as part of the paper's package and is originally written in Stata.Its primary components are used in this analysis to reproduce the paper's main findings. This was done by first reading in the Stata main datafile into R and then extracting relevant variables to reproduce the article's main findings. In addition to the extraction of relevant variables, the data was then sorted into two categories- National daily newspapers, and local daily newspapers. The primary data used in this analysis can be categorized into two components: 
+The authors' of this paper have used a variety of sources in order to construct their datasets. This data is publicly available as part of the paper's package and is originally written in Stata (Angelucci and Cage, 2019).Its primary components are used in this analysis to reproduce the paper's main findings. This was done by first reading in the Stata main datafile into R and then extracting relevant variables to reproduce the article's main findings. In addition to the extraction of relevant variables, the data was then sorted into two categories- National daily newspapers, and local daily newspapers. The primary data used in this analysis can be categorized into two components: 
 
 * Prices, Circulation, and Revenues
 * Advertising Prices and Quantity
@@ -607,6 +607,10 @@ It is important to note the differences in analysis between the original paper a
 
 Angelucci, C., &amp; Cagé, J. (2019). Newspapers in Times of Low Advertising Revenues.
   American Economic Journal: Microeconomics, 11(3), 319-364. doi:10.1257/mic.20170306
+
+Angelucci, Charles, and Cagé, Julia. Replication data for: Newspapers in Times of Low Advertising Revenues. Nashville, TN: American
+  Economic Association [publisher], 2019. Ann Arbor, MI: Inter-university Consortium for Political and Social Research [distributor],
+  2019-12-07. https://doi.org/10.3886/E116438V1
 
 Baragey, D. (n.d.). Newspaper Advertising vs. TV Advertising. Retrieved December 22, 2020,
   from http://www.publishers-edge.com/index_files/Paper_vs_TV.htm
