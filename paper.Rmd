@@ -1,0 +1,685 @@
+---
+title: "Newspapers"
+author: "Bianca Pokhrel"
+date: "`r format(Sys.time(), '%d %B %Y')`"
+abstract: "This analysis reproduces the main findings of Angelucci and Cage 2019. We model the consequences on newspapers’ prices after a decline in advertising revenues. We build a unique dataset on French newspapers between 1960 and 1974 and perform a difference-in-differences analysis exploiting the introduction of advertising on telivision and argue that this introduction affected the advertisement revenue of national daily newspapers greater than local daily newspapers. Full project code can be found at https://github.com/bianca-pokhrel/news-ad-rev \\par \\textbf{Keywords:} Newspapers, Advertisement, Television, OLS Regression, Revenue loss."
+output:
+  bookdown::pdf_document2:
+    citation_package: biblatex
+bibliography: reference.bib
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+### Workplace setup ###
+library(here)
+library(haven)
+library(huxtable)
+library(scales)
+library(tidyverse)
+library(dplyr)
+library(ggplot2)
+library(tidyr)
+library(knitr)
+library(kableExtra)
+library(ggforce)
+library(cowplot)
+
+
+```
+
+# Introduction
+
+As technology advances, many traditional forms of media are starting to be left behind in the past. One of which is the newspaper industry. A major factor in the decline of newspaper companies is the extreme drop in revenue generated through advertisement. Legacy newspapers have experienced this drop following the advent of the Internet. The 2019 Angelucci and Cage paper _Newspapers in Times of Low Advertising Revenues_ explores the relationship between advertisement revenue and readership. In this paper we will reproduce the Angelucci, Cage (2019) paper's primary findings and analyze the relationship between advertising revenues with the quantity of news to produce and respective pricing strategies. Using replication data and Stata scripts provided by Angelucci and Cage, we build a model in R in which a monopoly newspaper chooses the prices it charges to readers and advertisers. This allows for the generation of new insights regarding advertising revenues, and predicts that a drop in ad revenues may cause a decline in read prices. We use the model generated to test on a dataset on French newspapers between 1960-19-74 that has been constructed and provided by Angelucci and Cage. In this analysis, we then show that it is likely that the introduction of televised advertising created a direct, negative impact to the advertising side of the newspaper industry and an indirect impact to the reader side (Angelucci, Cagé, 2019). An key assumption that was used in this analysis was that the direct, negative impact of the advertising side of the newspaper industry affected national daily newspapers more severely than local daily newspapers. We are then able to use the generated model and assumptions to generate similar results to the original Angelucci and Cage 2019 paper.
+
+# Data
+
+The authors' of this paper have used a variety of sources in order to construct their datasets. This data is publicly available as part of the paper's package and is originally written in Stata.Its primary components are used in this analysis to reproduce the paper's main findings. This was done by first reading in the Stata main datafile into R and then extracting relevant variables to reproduce the article's main findings. In addition to the extraction of relevant variables, the data was then sorted into two categories- National daily newspapers, and local daily newspapers. The primary data used in this analysis can be categorized into two components: 
+
+* Prices, Circulation, and Revenues
+* Advertising Prices and Quantity
+
+A more detailed description of each of these components are as follows below.
+
+## Prices, Circulation, and Revenues
+
+The data collected to construct prices, circulation, and revenues was retrieved from the French Ministry of Information's non-publicly available records in the National archives. The authors were then able to access direct responses to newspapers' annual revenues and prices. Attributes such as unit price, the subscription price, number of issues per year, sales revenues, and advertising revenues were obtained. Information such as circulation with the share of unit buys and share of subscribers were also retrieved. This information was extracted for 68 local newspapers that were present in the archives. Additionally, on a national level, all 12 national papers that ran between 1960-1974 were extracted and added to construct the main dataset. 
+
+## Advertising Prices and Quantity
+
+Advertising prices and quantities may act as confounders when measuring revenue generated through advertisements. Thus, it is necessary to retrieve data regarding both price and quantities as they can be used to differentiate and isolate these effects.
+
+Advertising prices were collected through various sources. One of these sources is _"Tarif Media"_- an publication that releases information of how advertisements are priced- it even goes into detail on how the prices may range depending on what page the advertisement is placed on. Advertisements closer to the front of the page- or front cover advertisements understandably create more revenue than advertisements placed inconspicuously in the middle or back of a newspaper. In this analysis, data was collected for the rate for front-page ads as that is where there is the highest number of observations as to maximize the sample size of the dataset. One weakness of obtaining prices this way is that more often than not, newspapers will give discounts to clients and thus the prices are an underestimation of revenue. In order to combat this, the authors used the total advertising revenues for a newspaper and divided this by the newspaper's circulation. 
+
+To collect data an the advertising quantity, the authors were able to retrieve the amount of advertising per issue directly from the paper version of newspapers available in the French National Library(cite). After studying the data, the authors were able to glean information on the total number of advertisements and the share percentage that is saved for advertising in the newspaper. In order to provide evidence for the paper's main findings, the authors also differentiated between national and local ads to show that national newspapers are more dependent on national ads than local newspapers.
+
+Tables 1-3 provide descriptive summary statistics for daily newspapers at the national level from 1960-1974. We can see in Table 2 that on average, between 1960 and 1974, the revenue generated from sales is 199 million euros and the quantity of advertising in newspapers is around 3 pages per newspaper. This represents 19 percent of the total content included in a newspaper. We can see that on average from 1960 to 1974, the revenue generated from advertising in national newspapers was approximately 228 million euros. We will keep this statistic in mind when comparing the revenue generated from advertisements for local newspapers.
+
+Tables 4-6 provide descriptive summary statistics for daily newspapers at the local level from 1960-1974. We can see in Table 4 that on average, between 1960 and 1974, the revenue generated from sales is 79 and the quantity of advertising in newspapers is around 3 pages per newspaper. This represents 19 percent of the total content included in a newspaper. We can see that on average from 1960 to 1974, the revenue generated from advertising in local newspapers was approximately 67 million euros. We can see that this number is significantly lower than the revenue generated from advertising in national newspapers. However, it is important to note that this difference does not show the effect that television advertising has had on national newspaper advertising revenue.
+
+\clearpage
+```{r reading_in_main_stata_data, include=FALSE, warning=FALSE}
+
+### Preamble ###
+# Purpose: Prepare the provided data in Stata format by reading it in using haven(). Additionally, only select for main variables to reproduce main results.
+# Author: Bianca Pokhrel
+# Contact: bianca.pokhrel@mail.utoronto.ca
+# License: MIT
+# Pre-requisites:
+# - Need to have downloaded data used from paper published
+
+newspaper_dta <- read_dta(here::here("inputs/data/116438-V1/data/dta/Angelucci_Cage_AEJMicro_dataset.dta"))
+
+newspaper_dta <- 
+  newspaper_dta %>% 
+  dplyr::select(year, id_news, after_national, local, national, # Diff in diff variables
+         ra_cst, qtotal, ads_p4_cst, ads_s, # Advertising side dependents
+         ps_cst, po_cst, qtotal, qs_s, rs_cst) %>% #Reader side dependents
+  mutate(ra_cst_div_qtotal = ra_cst / qtotal) %>% # An advertising side dependents needs to be built
+  mutate_at(vars(id_news, after_national, local, national), ~as.factor(.)) %>% # Change some to factors
+  mutate(year = as.integer(year))
+
+# ok great now we have the variables we want. time to talk about them and draw graphs and stuff
+```
+
+```{r summary_statistics_national_setup, include = FALSE, warning=FALSE}
+### Preamble ###
+# Purpose: Prepare the national data setup
+# Author: Bianca Pokhrel
+# Contact: bianca.pokhrel@mail.utoronto.ca
+# License: MIT
+# Pre-requisites:
+# - Need to have downloaded data used from paper published
+national_newspaper <- filter(newspaper_dta, national=="1")
+
+# for prices
+prices_summary <- select(national_newspaper, po_cst, ps_cst, ads_p4_cst)
+unit_buyer_count <- prices_summary %>% 
+  group_by(po_cst) %>%
+  summarise(n = n())
+unit_buyer_count <- sum(unit_buyer_count$n)
+
+sub_price_count <- prices_summary %>%
+  group_by(ps_cst) %>%
+  summarise(n=n())
+sub_price_count <- sum(sub_price_count$n)
+
+display_ad_count <- prices_summary %>%
+  group_by(ads_p4_cst) %>%
+  summarise(n=n())
+display_ad_count <- sum(display_ad_count$n)
+
+prices_summary <- summary(prices_summary)
+
+# for revenues
+revenues_summary <- select(national_newspaper, ra_cst, rs_cst)
+
+rev_ad_count <- revenues_summary %>%
+  group_by(ra_cst) %>%
+  summarise(n=n())
+rev_ad_count <- sum(rev_ad_count$n)
+
+rev_sales_count <- revenues_summary %>%
+  group_by(rs_cst) %>%
+  summarise(n=n())
+rev_sales_count <- sum(rev_sales_count$n)
+
+revenues_summary <- summary(revenues_summary)
+
+# for circulation
+circulation_summary <- select(national_newspaper, qtotal, ads_s)
+
+circ_count <- circulation_summary %>%
+  group_by(qtotal) %>%
+  summarise(n=n())
+circ_count <- sum(circ_count$n)
+
+share_sub_count <- circulation_summary %>%
+  group_by(ads_s) %>%
+  summarise(n=n())
+share_sub_count <- sum(share_sub_count$n)
+
+circulation_summary <- summary(circulation_summary)
+
+
+# now we want to construct a table for the summary statistics
+
+row_names <- c("Unit buyer price", "Subscription price per issue", "Display ad rate (listed price)", "Revenues from advertising", "Revenues from sales", "Total circulation", "Share of subscribers (percent)")
+
+col_names <- c("Mean", "Median", "Min", "Max")
+```
+
+
+``` {r, include=TRUE, warning=FALSE}
+
+# taken from output of price_summary
+n_summary_table_price <- matrix(c(3.592, 3.486, 2.395, 9.345, 2.807, 2.722, 1.925, 5.630, 121.13, 114.52, 17.54, 274.20), ncol = 4, byrow = TRUE)
+
+colnames(n_summary_table_price) <- col_names
+rownames(n_summary_table_price) <- row_names[1:3]
+
+n_summary_table_price %>%
+  kbl(caption = "Summary Statistics: National Daily Newspapers Prices") %>%
+  kable_classic(full_width = F, html_font = "Cambria")
+
+
+```
+
+``` {r, include=TRUE, warning=FALSE}
+
+# taken from output of price_summary
+n_summary_table_rev <- matrix(c(228.1, 102.7, 668.3, 864.3, 199, 144.8, 119.7, 656.6), ncol = 4, byrow = TRUE)
+
+colnames(n_summary_table_rev) <- col_names
+rownames(n_summary_table_rev) <- row_names[4:5]
+
+n_summary_table_rev %>%
+  kbl(caption = "Summary Statistics: National Daily Newspapers Revenues") %>%
+  kable_classic(full_width = F, html_font = "Cambria")
+
+
+```
+
+``` {r, include=TRUE, warning=FALSE}
+
+# taken from output of price_summary
+n_summary_table_cir <- matrix(c(295210, 181574, 16112, 1143676, 25.64, 25.57, 4.68, 54.02), ncol = 4, byrow = TRUE)
+
+colnames(n_summary_table_cir) <- col_names
+rownames(n_summary_table_cir) <- row_names[6:7]
+
+n_summary_table_cir %>%
+  kbl(caption = "Summary Statistics: National Daily Newspapers Circulation") %>%
+  kable_classic(full_width = F, html_font = "Cambria")
+
+
+```
+
+```{r summary_statistics_local_setup, include = FALSE, warning=FALSE}
+
+### Preamble ###
+# Purpose: Prepare the local data setup
+# Author: Bianca Pokhrel
+# Contact: bianca.pokhrel@mail.utoronto.ca
+# License: MIT
+# Pre-requisites:
+# - Need to have downloaded data used from paper published
+
+local_newspaper <- filter(newspaper_dta, local=="1")
+
+# for prices
+l_prices_summary <- select(local_newspaper, po_cst, ps_cst, ads_p4_cst)
+l_unit_buyer_count <- l_prices_summary %>% 
+  group_by(po_cst) %>%
+  summarise(n = n())
+l_unit_buyer_count <- sum(l_unit_buyer_count$n)
+
+l_sub_price_count <- l_prices_summary %>%
+  group_by(ps_cst) %>%
+  summarise(n=n())
+l_sub_price_count <- sum(l_sub_price_count$n)
+
+l_display_ad_count <- l_prices_summary %>%
+  group_by(ads_p4_cst) %>%
+  summarise(n=n())
+l_display_ad_count <- sum(l_display_ad_count$n)
+
+l_prices_summary <- summary(l_prices_summary)
+
+# for revenues
+l_revenues_summary <- select(local_newspaper, ra_cst, rs_cst)
+
+l_rev_ad_count <- l_revenues_summary %>%
+  group_by(ra_cst) %>%
+  summarise(n=n())
+l_rev_ad_count <- sum(l_rev_ad_count$n)
+
+l_rev_sales_count <- l_revenues_summary %>%
+  group_by(rs_cst) %>%
+  summarise(n=n())
+l_rev_sales_count <- sum(l_rev_sales_count$n)
+
+l_revenues_summary <- summary(l_revenues_summary)
+
+# for circulation
+l_circulation_summary <- select(local_newspaper, qtotal, ads_s)
+
+l_circ_count <- l_circulation_summary %>%
+  group_by(qtotal) %>%
+  summarise(n=n())
+l_circ_count <- sum(l_circ_count$n)
+
+l_share_sub_count <- l_circulation_summary %>%
+  group_by(ads_s) %>%
+  summarise(n=n())
+l_share_sub_count <- sum(l_share_sub_count$n)
+
+l_circulation_summary <- summary(l_circulation_summary)
+
+
+# now we want to construct a table for the summary statistics
+
+row_names <- c("Unit buyer price", "Subscription price per issue", "Display ad rate (listed price)", "Revenues from advertising", "Revenues from sales", "Total circulation", "Share of subscribers (percent)")
+
+col_names <- c("Mean", "Median", "Min", "Max")
+```
+
+``` {r include=TRUE, warning=FALSE}
+
+# taken from output of price_summary
+l_summary_table_price <- matrix(c(3.175, 3.272, 0.818, 5.700, 2.7704, 2.8550, 0.6817, 4.6868, 80.333, 57.696, 3.757, 327.200), ncol = 4, byrow = TRUE)
+
+colnames(l_summary_table_price) <- col_names
+rownames(l_summary_table_price) <- row_names[1:3]
+
+l_summary_table_price %>%
+  kbl(caption = "Summary Statistics: Local Daily Newspapers Prices") %>%
+  kable_classic(full_width = F, html_font = "Cambria")
+
+
+```
+
+``` {r, include=TRUE, warning=FALSE}
+
+# taken from output of price_summary
+l_summary_table_rev <- matrix(c(66.8, 30.2, 0.55, 416.4, 79.1, 35.7, 0.26, 750.7), ncol = 4, byrow = TRUE)
+
+colnames(l_summary_table_rev) <- col_names
+rownames(l_summary_table_rev) <- row_names[4:5]
+
+l_summary_table_rev %>%
+  kbl(caption = "Summary Statistics: Local Daily Newspapers Revenues") %>%
+  kable_classic(full_width = F, html_font = "Cambria")
+
+
+```
+
+``` {r, include=TRUE, warning=FALSE}
+
+# taken from output of price_summary
+l_summary_table_cir <- matrix(c(101488, 50586, 1480, 654992, 17.599, 16.553, 1.625, 59.556), ncol = 4, byrow = TRUE)
+
+colnames(l_summary_table_rev) <- col_names
+rownames(l_summary_table_rev) <- row_names[6:7]
+
+l_summary_table_cir %>%
+  kbl(caption = "Summary Statistics: Local Daily Newspapers Circulation") %>%
+  kable_classic(full_width = F, html_font = "Cambria")
+```
+
+\clearpage
+
+In this paper, the authors' argue that the introduction of television in 1968 affected the revenue created from advertising in national newspapers but did not create a drastic change in revenue for local daily newspapers. This is due to the content that was broadcasted on television during the period of time the authors' extracted their sample from. During 1976-1974, the content broadcasted on television was almost exclusively national (Angelucci, Cage, 2019). Thus, this paper suggests that local daily newspapers are the control group and national daily newspapers are the treatment group. 
+
+
+``` {r fig.cap="Advertising revenue generated from local and national daily newspapers from 1960 to 1974", fig.dim=c(4, 2), include=TRUE, warning=FALSE}
+newspaper_dta %>% 
+  mutate(type = if_else(local == 1, "Local", "National")) %>% 
+  ggplot(aes(x = year, y = ra_cst)) +
+  geom_point(alpha = 0.5) +
+  scale_y_continuous(labels = dollar_format(prefix="$", suffix = "M", scale = 0.000001)) +
+  labs(x = "Year",
+       y = "Advertising revenue") +
+  facet_wrap(vars(type),
+               nrow = 2) +
+  theme_classic() +
+  geom_vline(xintercept = 1966.5, linetype = "dashed")
+
+```
+
+From Figure 1, we can see the true effect that television has had on the advertising revenues generated for national newspapers. It is important to note that the total advertising revenues of national daily newspapers decreased even though the total advertising market was rapidly expanding in France between 1967 and 1974 (Angelucci, Cage, 2019). Figure 1 shows that after television standards were implemented, the revenue generated from advertisement at the national level has decreased whereas the local newspaper advertising revenues increased. In addition, Figure 2 shows that the share of national daily newspapers in total advertising revenues decreased by 3 percent from 1967 to 1974. 
+
+```{r fig.cap="Share of total advertising revenues by media outlets in 1967 and 1974", fig.dim=c(7,7), include=TRUE, warning=FALSE}
+
+library(haven)
+adv_dta<- read_dta(here::here("inputs/data/116438-V1/data/dta/Angelucci_Cage_AEJMicro_Descriptive_evidence_advertising_industry.dta"))
+
+adv_transpose <- as.data.frame(t(as.matrix(adv_dta)))
+
+colnames(adv_transpose) <- c("year_1967", "year_1974")
+adv_transpose = adv_transpose[11:18,]
+
+
+
+classes <- c("Television", "National Daily Newspaper", "Local Daily Newspaper", "Outdoor", "Radio", "Cinema", "Magazines", "Other")
+adv_transpose <- cbind(classes, adv_transpose)
+adv_transpose <- adv_transpose %>% mutate(across(where(is.numeric), round, 1))
+mycols <- c("#0073C2FF", "#EFC000FF", "#868686FF", "#CD534CFF", "Purple", "Orange", "Black", "Green")
+
+
+# making pie chart for 1967
+pie1 <- dplyr::select(adv_transpose, classes, year_1967)
+pie1 <- pie1 %>%
+  arrange(desc(classes)) %>%
+  mutate(lab.ypos = cumsum(year_1967) - 0.5*year_1967)
+
+pie1 <- pie1 %>% 
+  mutate(end = 2 * pi * cumsum(year_1967)/sum(year_1967),
+         start = lag(end, default = 0),
+         middle = 0.5 * (start + end),
+         hjust = ifelse(middle > pi, 1, 0),
+         vjust = ifelse(middle < pi/2 | middle > 3 * pi/2, 0, 1))
+
+plot_1967 <- ggplot(pie1) + 
+  geom_arc_bar(aes(x0 = 0, y0 = 0, r0 = 0, r = 1,
+                   start = start, end = end, fill = classes)) +
+  geom_text(aes(x = 1.05 * sin(middle), y = 1.05 * cos(middle), label = year_1967,
+                hjust = hjust, vjust = vjust)) +
+  coord_fixed() +
+  scale_x_continuous(limits = c(-1.5, 1.4),  # Adjust so labels are not cut off
+                     name = "", breaks = NULL, labels = NULL) +
+  scale_y_continuous(limits = c(-1, 1),      # Adjust so labels are not cut off
+                     name = "", breaks = NULL, labels = NULL) + 
+ scale_fill_discrete(name = "Media Outlets")+
+ theme_void()  
+
+# making plot for 1974
+pie2 <- dplyr::select(adv_transpose, classes, year_1974)
+pie2 <- pie2 %>%
+  arrange(desc(classes)) %>%
+  mutate(lab.ypos = cumsum(year_1974) - 0.5*year_1974)
+
+pie2 <- pie2 %>% 
+  mutate(end = 2 * pi * cumsum(year_1974)/sum(year_1974),
+         start = lag(end, default = 0),
+         middle = 0.5 * (start + end),
+         hjust = ifelse(middle > pi, 1, 0),
+         vjust = ifelse(middle < pi/2 | middle > 3 * pi/2, 0, 1))
+
+plot_1974 <- ggplot(pie2) + 
+  geom_arc_bar(aes(x0 = 0, y0 = 0, r0 = 0, r = 1,
+                   start = start, end = end, fill = classes)) +
+  geom_text(aes(x = 1.05 * sin(middle), y = 1.05 * cos(middle), label = year_1974,
+                hjust = hjust, vjust = vjust)) +
+  coord_fixed() +
+  scale_x_continuous(limits = c(-1.5, 1.4),  # Adjust so labels are not cut off
+                     name = "", breaks = NULL, labels = NULL) +
+  scale_y_continuous(limits = c(-1, 1),      # Adjust so labels are not cut off
+                     name = "", breaks = NULL, labels = NULL) + 
+ scale_fill_discrete(name = "Media Outlets")+
+ theme_void()  
+
+plot_grid(plot_1967, plot_1974 + theme(legend.position = "none"), 
+          labels = c("1967", "1974"),
+          ncol = 1, nrow = 2)
+
+```
+\clearpage
+
+# Model
+
+## Variable selection
+
+The primary goal of this report its to reproduce Angelucci (2019) main findings. To do this, we again separate national newspapers to be the treated group and local newspapers to be the control group. We can then compare the change from before 1967 to after 1967 change using our variables of interest. As the paper specifies, we first must look at the effect of  the introduction of advertising on television on the advertising side of the market. This includes advertising revenues, price, and quantities. We then look at the reader side of the market which includes subscription price, unit price, circulation, share of subscribers, and revenues from sales. 
+
+## Building the model
+
+As the paper states, we can use the following regression equation to support our analysis 
+
+The model is:
+
+$$ ln(y_{n,t}) = \beta_{0} + \beta_{1}(d_{N} \times d_{1967} + \lambda_n + \gamma_y + \epsilon)$$
+
+Where $\lambda_n$ is a fixed effect for each newspaper and the $\gamma_y$ is a fixed effect for each year. We limit the number of different dependent variables as it is the $\beta_1$ coefficient we are interested in. Since we have introduced newspaper and year fixed effects, we can now focus on our coefficient which tells us the annual effect for national newspapers after television advertising was introduced in comparison to our dependent variables for local newspapers trend. We assume that the trends of the dependent variables for local newspapers would be the same as the trends of dependent variables at the national level if we don't use our treatment. That is why it is important to create the distinction between control group and treatment group.
+
+```{r regression_models, include=FALSE, warning=FALSE, message=FALSE}
+# Advertising side
+ad_revenue <- lm(log(ra_cst) ~ after_national + id_news + year, data = newspaper_dta)
+ad_revenue_div_circulation <- lm(log(ra_cst_div_qtotal) ~ after_national + id_news + year, data = newspaper_dta)
+ad_price <- lm(log(ads_p4_cst) ~ after_national + id_news + year, data = newspaper_dta)
+ad_space <- lm(log(ads_s) ~ after_national + id_news + year, data = newspaper_dta)
+
+# Consumer side
+subscription_price <- lm(log(ps_cst) ~ after_national + id_news + year, data = newspaper_dta)
+unit_price <- lm(log(po_cst) ~ after_national + id_news + year, data = newspaper_dta)
+circulation <- lm(log(qtotal) ~ after_national + id_news + year, data = newspaper_dta)
+share_of_sub <- lm(log(qs_s) ~ after_national + id_news + year, data = newspaper_dta)
+revenue_from_sales <- lm(log(rs_cst) ~ after_national + id_news + year, data = newspaper_dta)
+
+```
+
+
+# Results
+
+From the models created for the advertising side we can see the following statistics. Keep in mind that the assumption is that after 1967 and the introduction of televised advertisements, national newspapers' advertisement revenue was negatively impact more than local newspapers:
+
+\clearpage
+```{r, include=TRUE, warning=FALSE, message=FALSE}
+
+omit_me <- c("(Intercept)", "id_news3", "id_news6", "id_news7", "id_news13", 
+             "id_news16", "id_news25", "id_news28", "id_news34", "id_news38", 
+             "id_news44", "id_news48", "id_news51", "id_news53", "id_news54", 
+             "id_news57", "id_news60", "id_news62", "id_news66", "id_news67", 
+             "id_news70", "id_news71", "id_news72", "id_news80", "id_news82", 
+             "id_news88", "id_news95", "id_news97", "id_news98", "id_news103", 
+             "id_news105", "id_news106", "id_news118", "id_news119", "id_news127", 
+             "id_news136", "id_news138", "id_news148", "id_news151", "id_news153", 
+             "id_news154", "id_news157", "id_news158", "id_news161", "id_news163", 
+             "id_news167", "id_news169", "id_news179", "id_news184", "id_news185", 
+             "id_news187", "id_news196", "id_news206", "id_news210", "id_news212", 
+             "id_news213", "id_news224", "id_news225", "id_news234", "id_news236", 
+             "id_news245", "id_news247", "id_news310", "id_news452", "id_news467", 
+             "id_news469", "id_news480", "id_news20040", "id_news20345", 
+             "id_news20346", "id_news20347", "id_news20352", "id_news20354", 
+             "id_news21006", "id_news21025", "id_news21173", "id_news21176", 
+             "id_news33718", "id_news34689", "id_news73")
+
+ad_side <- huxreg("Ad. rev." = ad_revenue, 
+       "Ad rev. div. circ." = ad_revenue_div_circulation, 
+       "Ad price" = ad_price, 
+       "Ad space" = ad_space,
+        omit_coefs = omit_me, 
+        number_format = 2
+        )
+ad_side= ad_side[-nrow(ad_side),]
+ad_side = ad_side[-1,]
+ad_side = ad_side[-7:-8,]
+ad_side$names[1] = "National x Post-TV Ad"
+rownames(ad_side) = c()
+
+knitr::kable(ad_side, digits=2, caption="Model is estimated using OLS estimations. All estimations include newspaper and year fixed effects. The dependent variables are in logarithm")
+
+```
+
+``` {r, include=TRUE, warning=FALSE, message=FALSE}
+
+
+omit_me <- c("(Intercept)", "id_news3", "id_news6", "id_news7", "id_news13", 
+             "id_news16", "id_news25", "id_news28", "id_news34", "id_news38", 
+             "id_news44", "id_news48", "id_news51", "id_news53", "id_news54", 
+             "id_news57", "id_news60", "id_news62", "id_news66", "id_news67", 
+             "id_news70", "id_news71", "id_news72", "id_news80", "id_news82", 
+             "id_news88", "id_news95", "id_news97", "id_news98", "id_news103", 
+             "id_news105", "id_news106", "id_news118", "id_news119", "id_news127", 
+             "id_news136", "id_news138", "id_news148", "id_news151", "id_news153", 
+             "id_news154", "id_news157", "id_news158", "id_news161", "id_news163", 
+             "id_news167", "id_news169", "id_news179", "id_news184", "id_news185", 
+             "id_news187", "id_news196", "id_news206", "id_news210", "id_news212", 
+             "id_news213", "id_news224", "id_news225", "id_news234", "id_news236", 
+             "id_news245", "id_news247", "id_news310", "id_nes452", "id_news467", 
+             "id_news469", "id_news480", "id_news20040", "id_news20345", 
+             "id_news20346", "id_news20347", "id_news20352", "id_news20354", 
+             "id_news21006", "id_news21025", "id_news21173", "id_news21176", 
+             "id_news33718", "id_news34689", "id_news73")
+
+read_side <- huxreg("Subscription price" = subscription_price, 
+       "Unit price" = unit_price, 
+       "Circulation" = circulation, 
+       "Share of sub" = share_of_sub,
+       "Revenue from sales" = revenue_from_sales,
+       omit_coefs = omit_me, 
+       number_format = 2
+       )
+read_side= read_side[-nrow(read_side),]
+read_side = read_side[-1,]
+read_side = read_side[-7:-8,]
+read_side$names[1] = "National x Post-TV Ad"
+rownames(read_side) = c()
+
+knitr::kable(read_side, digits=2, caption="Model is estimated using OLS estimations. All estimations include newspaper and year fixed effects. The dependent variables are in logarithm")
+
+```
+
+
+``` {r, fig.cap="Model is estimated using OLS. Plot shows effect of revenue sales throughout the years", include=TRUE, warning=FALSE, message=FALSE}
+ggplot(newspaper_dta, aes(x = year, y = log(ra_cst))) + 
+  geom_point() +
+  stat_smooth(method = "lm", col = "red")
+
+```
+
+``` {r, fig.cap="Model is estimated using OLS. Plot shows effect of percentage of advertisement shares of revenue throughout the years", include=TRUE, warning=FALSE, message=FALSE}
+ggplot(newspaper_dta, aes(x = year, y = log(ra_cst_div_qtotal))) + 
+  geom_point() +
+  stat_smooth(method = "lm", col = "red")
+
+```
+
+``` {r, include=TRUE, fig.cap="Model is estimated using OLS. Plot shows effect of revenue from advertising throughout the years", warning=FALSE, message=FALSE}
+ggplot(newspaper_dta, aes(x = year, y = log(ads_p4_cst))) + 
+  geom_point() +
+  stat_smooth(method = "lm", col = "red")
+
+```
+
+``` {r, fig.cap="Model is estimated using OLS. Plot shows effect of share of advertising throughout the years", include=TRUE, warning=FALSE, message=FALSE}
+ggplot(newspaper_dta, aes(x = year, y = log(ads_s))) + 
+  geom_point() +
+  stat_smooth(method = "lm", col = "red")
+
+```
+
+``` {r, fig.cap="Model is estimated using OLS. Plot shows effect of subscription price per issue throughout the years", include=TRUE, warning=FALSE, message=FALSE}
+ggplot(newspaper_dta, aes(x = year, y = log(ps_cst))) + 
+  geom_point() +
+  stat_smooth(method = "lm", col = "red")
+
+```
+
+``` {r, fig.cap="Model is estimated using OLS. Plot shows effect of unit buyer price throughout the years", include=TRUE, warning=FALSE, message=FALSE}
+ggplot(newspaper_dta, aes(x = year, y = log(po_cst))) + 
+  geom_point() +
+  stat_smooth(method = "lm", col = "red")
+
+```
+
+``` {r, fig.cap="Model is estimated using OLS. Plot shows effect of circulation totals throughout the years", include=TRUE, warning=FALSE, message=FALSE}
+ggplot(newspaper_dta, aes(x = year, y = log(qtotal))) + 
+  geom_point() +
+  stat_smooth(method = "lm", col = "red")
+
+```
+
+``` {r, fig.cap="Model is estimated using OLS. Plot shows effect of share of subscribers throughout the years", include=TRUE, warning=FALSE, message=FALSE}
+ggplot(newspaper_dta, aes(x = year, y = log(qs_s))) + 
+  geom_point() +
+  stat_smooth(method = "lm", col = "red")
+
+```
+
+``` {r, fig.cap="Model is estimated using OLS. Plot shows effect of revenue from sales throughout the years", include=TRUE,  warning=FALSE, message=FALSE}
+ggplot(newspaper_dta, aes(x = year, y = log(rs_cst))) + 
+  geom_point() +
+  stat_smooth(method = "lm", col = "red")
+
+```
+
+\clearpage
+
+# Discussion
+
+We can see that there is a fall in advertising revenues and advertising prices in national newspapers that can be explained by the introduction of television as a means of advertisement. However, we can see that there is less of a change in how much advertisement is being sold even though the cost of advertising in a newspaper is lower. A possible rational is as follows. Although this data pertains to France, a similar phenomenon occurred in the United States where there were only 2490 cable TV systems in the US in 1970 and by the end of the decade, that number skyrocketed to 15.5 million (2017). This incredible influx of TV systems globally suggests that advertisements that play on the television are more likely to reach a greater audience. Thus, with national newspapers slowly becoming less relevant throughout the years (as important information can easily be digested through television), companies are more likely to invest in television marketing rather than through newspapers. 
+
+Additionally, a television advertisement allows companies to think creatively as both visual and auditory can be stimulated. The combination of both visual and auditory stimulus allows for better memory recall which leads into more users remembering advertisements they've seen (Liner, Blosser, Cunigan, 2019). Another possibility could be for companies wishing to advertise not just a large readership, but also an exclusive one. This can be done  because advertisers' lower willingness to pay for exclusive access to readers' attention will also in turn lower the newspapers' incentives to grant exclusivity. This then can offset the temptation to decrease the quantity of advertising that follows from lower prices (Angelucci, Cagé, 2019). 
+
+Lastly, there is a possibility that "consumers are more likely to tell the advertiser they saw the ad on TV than they are to tell them they saw the ad in the newspaper. This is a strong factor in the power of selling television advertising. This is especially powerful when someone from “Timbuktu” comes in the front door of the advertiser and tells them they saw the ad on TV(Baragey)".
+
+While analyzing the models, it is important to also note that although national newspapers took the brunt of the negative effect of televised advertising, local newspapers were affect as well to a lesser degree (Angelucci, Cagé, 2019). This may potentially bias the results of the model. However, we can make an argument that the changes in reader prices should be lower when in an competitive market. Additionally, competition among national newspapers may be higher than local newspapers- this means that this bias would impact the findings and we would be under-estimating the effects of televised advertisement rather than over-estimating (Angelucci, Cagé, 2019).
+
+Additionally, when we look at this analysis as a whole, it is imperative that we think critically about what this means. This data was retrieved from French national archives approximately 50 years ago. We must ask ourselves if this analysis can allow us to approximate current trends today. It is possible that the French newspaper industry is unique and that this analysis is rendered unusable in any other context. It is more likely, though, that the change from paper to online has irrevocably changed how newspapers are funded and sustained. It is interesting to draw parallels in today's society regarding the use of cable television for advertisement and the use of social media with this analysis. With the boom of social media and 'influencers', currently brands are diverting marketing budgets away from television ads and investing in social advertising strategies instead. According to eMarketer (2016), spending on digital advertising (like social media marketing, influencer marketing, and other forms of social advertising) surpassed television ad spending for the first time in 2017. By 2020, TV's share of ad spending will drop below one third (2016). Despite the slow migration towards social media, big companies are still investing in cable TV advertisements. This is due to a number of reasons- some of which are covered in this analysis. For instance, television is still an excellent way to generate large numbers in terms of reach and brand awareness, while social media is often used in different strategic ways (Shales, 1979). Additionally, For some kinds of products and messages, the freedom of making a short film (which is what commercials really are) about the product or service is a better way to convey the message and meaning a company wants to (Shales, 1979). 
+
+It is important to note the differences in analysis between the original paper and the paper reproduced for this report. A few points to note are that the exact findings are not identical however the models produced are extremely similar to those produced in the original paper. This is due to the use of only the main datasets for the regression analysis. Supplemental datasets were used in the original analysis however, due to time constraints were not included in this analysis. The addition of these data sets would increase the accuracy of this analysis with the original. Despite this, however, the main discussions in the analysis of the data are not affected.
+
+
+\clearpage
+
+# References
+
+Angelucci, C., &amp; Cagé, J. (2019). Newspapers in Times of Low Advertising Revenues.
+  American Economic Journal: Microeconomics, 11(3), 319-364. doi:10.1257/mic.20170306
+
+Baragey, D. (n.d.). Newspaper Advertising vs. TV Advertising. Retrieved December 22, 2020,
+  from http://www.publishers-edge.com/index_files/Paper_vs_TV.htm
+
+Claus O. Wilke (2020). cowplot: Streamlined Plot Theme and Plot Annotations for
+  'ggplot2'. R package version 1.1.0. https://CRAN.R-project.org/package=cowplot
+
+David Hugh-Jones (2020). huxtable: Easily Create and Style Tables for LaTeX, HTML
+  and Other Formats. R package version 5.1.1.
+  https://CRAN.R-project.org/package=huxtable
+  
+Digital Ad Spending to Surpass TV Next Year. (2016, March 08). Retrieved December 22, 2020,
+  from https://www.emarketer.com/Article/Digital-Ad-Spending-Surpass-TV-Next-Year/1013671
+
+H. Wickham. ggplot2: Elegant Graphics for Data Analysis. Springer-Verlag New York,
+  2016.
+
+Hadley Wickham and Evan Miller (2020). haven: Import and Export 'SPSS', 'Stata' and
+  'SAS' Files. R package version 2.3.1. https://CRAN.R-project.org/package=haven
+  
+Hadley Wickham, Romain François, Lionel Henry and Kirill Müller (2020). dplyr: A
+  Grammar of Data Manipulation. R package version 1.0.2.
+  https://CRAN.R-project.org/package=dplyr
+
+Hadley Wickham and Dana Seidel (2020). scales: Scale Functions for Visualization. R
+  package version 1.1.1. https://CRAN.R-project.org/package=scales
+  
+Hadley Wickham (2020). tidyr: Tidy Messy Data. R package version 1.1.2.
+  https://CRAN.R-project.org/package=tidyr
+  
+Hao Zhu (2020). kableExtra: Construct Complex Table with 'kable' and Pipe Syntax. R
+  package version 1.3.1. https://CRAN.R-project.org/package=kableExtra
+  
+JJ Allaire and Yihui Xie and Jonathan McPherson and Javier Luraschi and Kevin Ushey
+  and Aron Atkins and Hadley Wickham and Joe Cheng and Winston Chang and Richard
+  Iannone (2020). rmarkdown: Dynamic Documents for R. R package version 2.6. URL
+  https://rmarkdown.rstudio.com.
+  
+Kirill Müller (2020). here: A Simpler Way to Find Your Files. R package version
+  1.0.1. https://CRAN.R-project.org/package=here
+  
+Lindner, Katie; Blosser, Greta; and Cunigan, Kris (2009) "Visual versus auditory learning and
+  memory recall performance on short-term versus long-term tests," Modern Psychological
+  Studies: Vol. 15 : No. 1 , Article 6. 
+  
+R Core Team (2020). R: A language and environment for statistical computing. R
+  Foundation for Statistical Computing, Vienna, Austria. URL
+  https://www.R-project.org/
+  
+Shales, T. (1979, December 27). TV in the '70s. Retrieved December 22, 2020, from  
+  https://www.washingtonpost.com/archive/lifestyle/1979/12/27/tv-in-the-70s/6a3a1ac0-d251-428
+  c-acf7-1e227488474a/
+
+Social Advertising vs. TV Ads: Who Wins? (2017, August 16). Retrieved December 22, 2020, from
+  https://mediakix.com/blog/are-social-advertising-or-television-ads-more-effective/
+
+Thomas Lin Pedersen (2020). ggforce: Accelerating 'ggplot2'. R package version
+  0.3.2. https://CRAN.R-project.org/package=ggforce
+
+Wickham et al., (2019). Welcome to the tidyverse. Journal of Open Source Software,
+  4(43), 1686, https://doi.org/10.21105/joss.01686
+
+
+Yihui Xie and J.J. Allaire and Garrett Grolemund (2018). R Markdown: The Definitive
+  Guide. Chapman and Hall/CRC. ISBN 9781138359338. URL
+  https://bookdown.org/yihui/rmarkdown.
+
+Yihui Xie and Christophe Dervieux and Emily Riederer (2020). R Markdown Cookbook.
+  Chapman and Hall/CRC. ISBN 9780367563837. URL
+  https://bookdown.org/yihui/rmarkdown-cookbook.
+  
+  
+  
+
+  
+  
