@@ -1,5 +1,5 @@
 ---
-title: "Newspapers"
+title: "Into the Digital Age- Low Advertising Revenues Effect on Newspapers"
 author: "Bianca Pokhrel"
 date: "`r format(Sys.time(), '%d %B %Y')`"
 abstract: "This analysis reproduces the main findings of Angelucci and Cage 2019. We model the consequences on newspapers’ prices after a decline in advertising revenues. We build a unique dataset on French newspapers between 1960 and 1974 and perform a difference-in-differences analysis exploiting the introduction of advertising on telivision and argue that this introduction affected the advertisement revenue of national daily newspapers greater than local daily newspapers. Full project code can be found at https://github.com/bianca-pokhrel/news-ad-rev \\par \\textbf{Keywords:} Newspapers, Advertisement, Television, OLS Regression, Revenue loss."
